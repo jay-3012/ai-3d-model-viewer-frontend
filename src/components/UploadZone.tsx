@@ -1,5 +1,6 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { useFileUpload } from '../hooks/useFileUpload';
+import { isModelFile, isTextureFile } from '../utils/helpers';
 
 interface UploadZoneProps {
   onUploadSuccess: (modelUrl: string) => void;
@@ -9,23 +10,51 @@ export function UploadZone({ onUploadSuccess }: UploadZoneProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const { upload, uploading, progress, status, error } = useFileUpload(onUploadSuccess);
+  const [isDragging, setIsDragging] = useState(false);
 
   const handleFolderSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
 
     console.log(`Selected ${files.length} files from folder`);
-    await upload(files);
+    await processFiles(files);
 
     if (folderInputRef.current) {
       folderInputRef.current.value = '';
     }
   };
 
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    console.log(`Selected ${files.length} files`);
+    await processFiles(files);
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const processFiles = async (files: File[]) => {
+    // Organize files
+    const modelFiles = files.filter(f => isModelFile(f.name));
+    const textureFiles = files.filter(f => isTextureFile(f.name));
+    
+    console.log(`Found ${modelFiles.length} model(s) and ${textureFiles.length} texture(s)`);
+    
+    if (modelFiles.length === 0) {
+      alert('No model files found. Please upload GLB, GLTF, FBX, OBJ, DAE, or STL files.');
+      return;
+    }
+
+    // Upload all files
+    await upload(files);
+  };
+
   const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
-    e.currentTarget.style.borderColor = 'rgba(59, 130, 246, 0.5)';
-    e.currentTarget.style.background = 'rgba(59, 130, 246, 0.1)';
+    setIsDragging(false);
 
     const items = Array.from(e.dataTransfer.items);
     const files: File[] = [];
@@ -45,7 +74,7 @@ export function UploadZone({ onUploadSuccess }: UploadZoneProps) {
 
     console.log(`Dropped ${files.length} files`);
     if (files.length > 0) {
-      await upload(files);
+      await processFiles(files);
     }
   };
 
@@ -73,173 +102,199 @@ export function UploadZone({ onUploadSuccess }: UploadZoneProps) {
 
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
-    e.currentTarget.style.borderColor = 'rgba(59, 130, 246, 1)';
-    e.currentTarget.style.background = 'rgba(59, 130, 246, 0.2)';
+    setIsDragging(true);
   };
 
   const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
-    e.currentTarget.style.borderColor = 'rgba(59, 130, 246, 0.5)';
-    e.currentTarget.style.background = 'rgba(59, 130, 246, 0.1)';
+    e.preventDefault();
+    setIsDragging(false);
   };
 
   return (
-    <div
-      style={{
-        height: '100%',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 40,
-        background: 'linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 100%)',
-      }}
-    >
-      <div style={{ textAlign: 'center', maxWidth: 700, color: 'white' }}>
-        <div style={{ fontSize: 80, marginBottom: 30 }}>🏗️</div>
+    <div>
+      {/* Main Drop Zone */}
+      <div
+        style={{
+          background: isDragging 
+            ? 'rgba(59, 130, 246, 0.2)' 
+            : 'rgba(59, 130, 246, 0.05)',
+          border: `2px dashed ${isDragging ? 'rgba(59, 130, 246, 1)' : 'rgba(59, 130, 246, 0.3)'}`,
+          borderRadius: 12,
+          padding: 40,
+          textAlign: 'center',
+          transition: 'all 0.3s ease',
+          cursor: uploading ? 'not-allowed' : 'pointer',
+          position: 'relative',
+        }}
+        onDrop={handleDrop}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+      >
+        <input
+          ref={folderInputRef}
+          type="file"
+          // @ts-ignore - webkitdirectory is not in types but works
+          webkitdirectory="true"
+          directory="true"
+          multiple
+          onChange={handleFolderSelect}
+          disabled={uploading}
+          style={{ display: 'none' }}
+        />
 
-        <h1
-          style={{
-            fontSize: 42,
-            fontWeight: 800,
-            marginBottom: 20,
-            background: 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-            backgroundClip: 'text',
-          }}
-        >
-          AI 3D Model Viewer
-        </h1>
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          accept=".glb,.gltf,.fbx,.obj,.dae,.stl,.png,.jpg,.jpeg,.webp"
+          onChange={handleFileSelect}
+          disabled={uploading}
+          style={{ display: 'none' }}
+        />
 
-        <p
-          style={{
-            fontSize: 18,
-            lineHeight: 1.8,
-            color: 'rgba(255, 255, 255, 0.7)',
-            marginBottom: 40,
-          }}
-        >
-          Upload your 3D model folder (with source/ and textures/) or individual files
-          to explore them in an immersive walkable environment.
-        </p>
-
-        <div
-          style={{
-            background: 'rgba(59, 130, 246, 0.1)',
-            border: '2px dashed rgba(59, 130, 246, 0.5)',
-            borderRadius: 16,
-            padding: 50,
-            marginBottom: 30,
-            transition: 'all 0.3s ease',
-            cursor: uploading ? 'not-allowed' : 'pointer',
-          }}
-          onClick={() => !uploading && folderInputRef.current?.click()}
-          onDrop={handleDrop}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-        >
-          <input
-            ref={folderInputRef}
-            type="file"
-            // @ts-ignore - webkitdirectory is not in types but works
-            webkitdirectory="true"
-            directory="true"
-            multiple
-            onChange={handleFolderSelect}
-            disabled={uploading}
-            style={{ display: 'none' }}
-          />
-
-          <div style={{ fontSize: 48, marginBottom: 15 }}>📁</div>
-          <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 15, color: '#3b82f6' }}>
-            {uploading ? 'Uploading...' : 'Drop Folder Here or Click to Browse'}
-          </div>
-          <div style={{ fontSize: 14, color: 'rgba(255, 255, 255, 0.6)', marginBottom: 10 }}>
-            Drag your entire model folder with source/ and textures/ subfolders
-          </div>
-          <div style={{ fontSize: 13, color: 'rgba(255, 255, 255, 0.4)' }}>
-            Supports: GLB, GLTF, FBX, OBJ + PNG, JPG textures
-          </div>
-
-          {(uploading || status) && (
-            <div style={{ marginTop: 25 }}>
-              <div
-                style={{
-                  width: '100%',
-                  height: 8,
-                  background: 'rgba(255, 255, 255, 0.1)',
-                  borderRadius: 4,
-                  overflow: 'hidden',
-                  marginBottom: 12,
-                }}
-              >
-                <div
-                  style={{
-                    width: `${progress}%`,
-                    height: '100%',
-                    background: 'linear-gradient(90deg, #3b82f6, #8b5cf6)',
-                    transition: 'width 0.3s ease',
-                    borderRadius: 4,
-                  }}
-                />
-              </div>
-              <div style={{ fontSize: 15, color: 'rgba(255, 255, 255, 0.9)', fontWeight: 600 }}>
-                {status}
-              </div>
-            </div>
-          )}
+        <div style={{ fontSize: 48, marginBottom: 15 }}>
+          {uploading ? '⏳' : '📤'}
+        </div>
+        
+        <div style={{ 
+          fontSize: 18, 
+          fontWeight: 700, 
+          marginBottom: 15, 
+          color: '#60a5fa' 
+        }}>
+          {uploading ? 'Uploading...' : 'Drop Files or Folder Here'}
+        </div>
+        
+        <div style={{ 
+          fontSize: 14, 
+          color: 'rgba(255, 255, 255, 0.6)', 
+          marginBottom: 20 
+        }}>
+          Drag and drop your 3D model files or folder with textures
         </div>
 
-        {error && (
-          <div
-            style={{
-              background: 'rgba(239, 68, 68, 0.2)',
-              border: '1px solid rgba(239, 68, 68, 0.5)',
-              borderRadius: 12,
-              padding: '16px 20px',
-              marginBottom: 20,
-              color: '#fca5a5',
-            }}
-          >
-            ⚠️ {error}
+        {/* Action Buttons */}
+        {!uploading && (
+          <div style={{ 
+            display: 'flex', 
+            gap: 12, 
+            justifyContent: 'center',
+            flexWrap: 'wrap'
+          }}>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              style={{
+                padding: '12px 24px',
+                borderRadius: 8,
+                border: 'none',
+                background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+                color: 'white',
+                fontSize: 14,
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+              }}
+            >
+              📄 Browse Files
+            </button>
+            
+            <button
+              onClick={() => folderInputRef.current?.click()}
+              style={{
+                padding: '12px 24px',
+                borderRadius: 8,
+                border: 'none',
+                background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
+                color: 'white',
+                fontSize: 14,
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+              }}
+            >
+              📁 Browse Folder
+            </button>
           </div>
         )}
 
+        {/* Progress */}
+        {(uploading || status) && (
+          <div style={{ marginTop: 25 }}>
+            <div
+              style={{
+                width: '100%',
+                height: 8,
+                background: 'rgba(255, 255, 255, 0.1)',
+                borderRadius: 4,
+                overflow: 'hidden',
+                marginBottom: 12,
+              }}
+            >
+              <div
+                style={{
+                  width: `${progress}%`,
+                  height: '100%',
+                  background: 'linear-gradient(90deg, #3b82f6, #8b5cf6)',
+                  transition: 'width 0.3s ease',
+                  borderRadius: 4,
+                }}
+              />
+            </div>
+            <div style={{ 
+              fontSize: 14, 
+              color: 'rgba(255, 255, 255, 0.9)', 
+              fontWeight: 600 
+            }}>
+              {status}
+            </div>
+          </div>
+        )}
+
+        {/* Supported Formats */}
+        <div style={{
+          marginTop: 20,
+          fontSize: 12,
+          color: 'rgba(255, 255, 255, 0.4)'
+        }}>
+          Supports: GLB, GLTF, FBX, OBJ, DAE, STL + textures (PNG, JPG, WebP)
+        </div>
+      </div>
+
+      {/* Error Display */}
+      {error && (
         <div
           style={{
-            marginTop: 30,
-            padding: 25,
-            background: 'rgba(59, 130, 246, 0.05)',
-            borderRadius: 16,
-            border: '1px solid rgba(59, 130, 246, 0.2)'
+            marginTop: 15,
+            background: 'rgba(239, 68, 68, 0.2)',
+            border: '1px solid rgba(239, 68, 68, 0.5)',
+            borderRadius: 8,
+            padding: '12px 16px',
+            color: '#fca5a5',
+            fontSize: 14,
           }}
         >
-          <div style={{ fontWeight: 700, marginBottom: 15, color: '#60a5fa', fontSize: 16 }}>
-            📦 Expected Folder Structure:
-          </div>
-          <div
-            style={{
-              fontSize: 13,
-              color: 'rgba(255,255,255,0.7)',
-              textAlign: 'left',
-              fontFamily: 'monospace',
-              background: 'rgba(0,0,0,0.3)',
-              padding: 15,
-              borderRadius: 8,
-              lineHeight: 1.8
-            }}
-          >
-            your-model/<br />
-            ├── source/<br />
-            │   └── model.glb<br />
-            └── textures/<br />
-            &nbsp;&nbsp;&nbsp;&nbsp;├── texture1.png<br />
-            &nbsp;&nbsp;&nbsp;&nbsp;├── texture2.png<br />
-            &nbsp;&nbsp;&nbsp;&nbsp;└── ...
-          </div>
-          <div style={{ marginTop: 15, fontSize: 13, color: 'rgba(255,255,255,0.6)' }}>
-            ✨ Textures will be automatically embedded into your GLB file
-          </div>
+          ⚠️ {error}
+        </div>
+      )}
+
+      {/* Tips */}
+      <div style={{
+        marginTop: 20,
+        padding: 15,
+        background: 'rgba(59, 130, 246, 0.05)',
+        borderRadius: 8,
+        fontSize: 13,
+        color: 'rgba(255, 255, 255, 0.7)',
+        lineHeight: 1.6
+      }}>
+        <div style={{ fontWeight: 600, marginBottom: 8, color: '#60a5fa' }}>
+          💡 Tips:
+        </div>
+        <div>
+          • Upload entire folder containing model + textures for best results<br />
+          • FBX, OBJ, and other formats will be automatically converted to GLB<br />
+          • Textures will be automatically embedded into your model<br />
+          • Large files may take a few minutes to process
         </div>
       </div>
     </div>
