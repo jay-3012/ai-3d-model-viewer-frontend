@@ -1,5 +1,6 @@
 import axios, { AxiosProgressEvent } from 'axios';
 import type { UploadResponse, JobStatus, TripoBalance, TripoGenerationOptions } from '../types';
+import type { HomeGenerationResponse } from '../types/home';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
@@ -20,12 +21,12 @@ class APIService {
     onProgress?: (percentage: number) => void
   ): Promise<UploadResponse> {
     const formData = new FormData();
-    
+
     // Handle both single file and multiple files
     const fileArray = Array.isArray(files) ? files : [files];
-    
+
     console.log(`Uploading ${fileArray.length} files:`, fileArray.map(f => f.name));
-    
+
     fileArray.forEach(file => {
       formData.append('files', file);
     });
@@ -83,12 +84,12 @@ class APIService {
   ): Promise<UploadResponse> {
     try {
       console.log('Generating from text:', prompt);
-      
+
       const response = await this.api.post<UploadResponse>('/tripo/generate-from-text', {
         prompt,
         options: options || {}
       });
-      
+
       console.log('Text generation response:', response.data);
       return response.data;
     } catch (error) {
@@ -111,14 +112,14 @@ class APIService {
   ): Promise<UploadResponse> {
     const formData = new FormData();
     formData.append('image', image);
-    
+
     if (options) {
       formData.append('options', JSON.stringify(options));
     }
 
     try {
       console.log('Generating from image:', image.name);
-      
+
       const response = await this.api.post<UploadResponse>(
         '/tripo/generate-from-image',
         formData,
@@ -136,7 +137,7 @@ class APIService {
           },
         }
       );
-      
+
       console.log('Image generation response:', response.data);
       return response.data;
     } catch (error) {
@@ -196,17 +197,40 @@ class APIService {
   async testConnection(): Promise<{ success: boolean; message: string }> {
     try {
       const healthy = await this.checkHealth();
-      
+
       if (healthy) {
         return { success: true, message: 'Backend is connected' };
       } else {
         return { success: false, message: 'Backend is not responding' };
       }
     } catch (error) {
-      return { 
-        success: false, 
+      return {
+        success: false,
         message: `Connection failed: ${error instanceof Error ? error.message : 'Unknown error'}`
       };
+    }
+  }
+
+  /**
+   * Generate home design from natural language prompt
+   */
+  async generateHome(prompt: string): Promise<HomeGenerationResponse> {
+    try {
+      console.log('Generating home from prompt:', prompt);
+
+      const response = await this.api.post<HomeGenerationResponse>('/generate/home', {
+        prompt
+      });
+
+      console.log('Home generation response:', response.data);
+      return response.data;
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const errorMessage = error.response?.data?.error || 'Home generation failed';
+        console.error('Home generation error:', errorMessage);
+        throw new Error(errorMessage);
+      }
+      throw error;
     }
   }
 }
